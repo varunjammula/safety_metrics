@@ -2,9 +2,10 @@ class SafetyMetrics:
     def __init__(self):
         print("Loading Safety Metrics")
 
-    def compute_SEV_longitudinal(self, vr, vf, rho, a_accel, a_max_brake, a_min_brake):
-        d_long = ((vr * rho) + 0.5 * a_accel * rho ** 2 + (vr + rho * a_accel ** 2) / (2 * a_min_brake) - vf ** 2 / (
-                    2 * a_max_brake))
+    def compute_SEV_longitudinal(self, vel_fol, vel_lead, rho, acc_fol, acc_max_brake_lead, acc_min_brake_fol):
+        # vr - follwing_vel, vf- leading_vel, a_accel - following_acc_inst, a_max_brake -  max dec of leading, a_min_brake -  min_dec of following
+        d_long = ((vel_fol * rho) + 0.5 * acc_fol * rho ** 2 + (vel_fol + rho * acc_fol ** 2) / (2 * acc_min_brake_fol) - vel_lead ** 2 / (
+                2 * acc_max_brake_lead))
         return d_long
 
     def compute_SEV_lateral(self, v1, v2, mu, rho, alat_max_brake, alat_min_brake):
