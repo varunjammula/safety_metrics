@@ -1,3 +1,4 @@
+import numpy as np
 class SafetyMetrics:
     def __init__(self):
         print("Loading Safety Metrics")
@@ -31,11 +32,23 @@ class SafetyMetrics:
     def compute_SECE(self):
         return
 
-    def compute_TTC(self, X_L, X_F, I_L, V_F, V_L):
-        return (X_L - X_F - I_L) / (V_F - V_L)
+    def compute_TTC(self, X_L, X_F, I_L, V_F, V_L, threshold=3):
+        ttc = (X_L - X_F - I_L) / (V_F - V_L)
+        if ttc < threshold:
+            return 1
+        else:
+            return 0
 
-    def compute_MTTC(self):
-        return
+    def compute_MTTC(self, Vel_fol, Vel_lead, acc_fol, acc_lead, y_lead, y_fol,  length_lead, threshold=3):
+        del_V = Vel_fol - Vel_lead
+        del_a = acc_fol - acc_lead
+        spacing = y_lead - y_fol - length_lead
+        # print('spacing:{}'.format(spacing))
+        MTTC = (-(del_V) + np.sqrt((del_V)**2 + 2 * del_a * spacing))/del_a
+        if MTTC < threshold:
+            return 1
+        else:
+            return 0
 
     def compute_PET(self):
         return
