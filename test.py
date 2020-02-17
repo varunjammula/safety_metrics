@@ -66,7 +66,7 @@ def compute_metrics(trajectory_data, v_following_id, v_leading_id, frame_id, spa
         vehicle_length_leading = get_value(d2_frame.v_Length)
         local_y_leading = get_value(d2_frame.Local_Y)
         acc_leading = get_value(d2_frame.v_Acc)
-        acc_max_brake_lead = get_acc_range(trajectory_data, v_leading_id)[0]
+        acc_max_brake_lead = get_acc_range(trajectory_data, v_leading_id)[1]
         spacing = get_value(d1_frame.Space_Headway)
         dlong = spacing - vehicle_length_leading
 
@@ -89,9 +89,9 @@ def compute_metrics(trajectory_data, v_following_id, v_leading_id, frame_id, spa
 
         ttc = sm.compute_TTC(local_y_leading, local_y_following, vehicle_length_leading, velocity_following,
                              velocity_leading)
-
-        mttc = sm.compute_MTTC(velocity_following, velocity_leading, acc_following, acc_leading, local_y_leading,
-                               local_y_following, vehicle_length_leading)
+        mttc =0
+        # mttc = sm.compute_MTTC(velocity_following, velocity_leading, acc_following, acc_leading, local_y_leading,
+        #                        local_y_following, vehicle_length_leading)
         if ttc < 3:
             ttc_f = 1
         else:
@@ -105,7 +105,7 @@ def compute_metrics(trajectory_data, v_following_id, v_leading_id, frame_id, spa
         if not math.isnan(mttc):
             print(v_following_id, v_leading_id, frame_id)
             print('acc ', end='')
-            print(acc_following, acc_leading)
+            print(acc_following, acc_leading, acc_min_brake_fol, acc_max_brake_lead)
             # print(local_y_leading - local_y_following - vehicle_length_following)
             print('vel ', end='')
             print(velocity_following, velocity_leading)
@@ -118,19 +118,36 @@ def compute_metrics(trajectory_data, v_following_id, v_leading_id, frame_id, spa
             print('MTTC: {}, mttc_f: {}'.format(mttc, mttc_f))
 
             print('-----')
-        return (f_id, l_id, frame_id, velocity_following, velocity_leading, acc_following, acc_leading, spacing, dlong, sev_long, sev, ttc, ttc_f, mttc, mttc_f)
+            return (v_following_id, v_leading_id, frame_id, velocity_following, velocity_leading, acc_following, acc_leading, spacing, dlong, sev_long, sev, ttc, ttc_f, mttc, mttc_f)
     except Exception as e:
         print(e)
 
 
 def get_acc_range(trajectory_data, vehicle_ID):
     vehicle_data = get_data_by_vehicle_ID(trajectory_data, id=vehicle_ID)
-    temp = []
+    acc_neg = []
+    acc_pos = []
+    all_data = []
+    new_data = []
     for val in vehicle_data.v_Acc:
-        if val < 0:
-            temp.append(val)
-    return np.min(vehicle_data.v_Acc), np.max(vehicle_data.v_Acc), np.max(temp)
+        all_data.append(val)
+    # return np.min(vehicle_data.v_Acc), np.max(vehicle_data.v_Acc), np.max(temp)
+    # print(all_data)
+    # print(len(all_data))
+    n1 = list(filter(lambda a: a != -11.2, all_data))
+    n2 = list(filter(lambda a: a != 11.2, n1))
+    # all_data.remove(11.2)
+    # all_data.remove(-11.2)
+    # print(len(n2))
+    # print(n2)
+    # print('----')
 
+    for val in n2:
+        # print(val)
+        if val < 0:
+            acc_neg.append(val)
+    return np.mean(acc_neg), np.min(acc_neg)
+    # return np.mean(acc_neg), np.mean(acc_pos), np.min(acc_neg), np.max(acc_neg)
 
 def clean_data(trajectory_data):
     bad_data1 = trajectory_data[trajectory_data['v_Acc'] == 11.2].index
@@ -239,30 +256,38 @@ def get_pairs(trajectory_data):
 
         for frame in d1_frame.Frame_ID:
             f_temp = d1_frame[d1_frame['Frame_ID'] == frame]
+            f_temp_prev = d1_frame[d1_frame['Frame_ID'] == frame-1]
             l_temp = d2_frame[d2_frame['Frame_ID'] == frame]
             try:
                 v_f = get_value(f_temp.v_Vel)
                 v_l = get_value(l_temp.v_Vel)
                 a_f = get_value(f_temp.v_Acc)
                 a_l = get_value(l_temp.v_Acc)
+                a_f_prev = get_value(f_temp_prev.v_Acc)
 
                 # case-1
-                if (v_f > v_l) and (a_f < a_l) and a_f < 0:
-                    f_ids.append(f_id)
-                    l_ids.append(l_id)
-                    frame_ids.append(frame)
-
-                # # case-2
-                # if (v_f > v_l) and (a_f < a_l):
+                # if (v_f > v_l) and (a_f < a_l) and a_f < 0:
                 #     f_ids.append(f_id)
                 #     l_ids.append(l_id)
                 #     frame_ids.append(frame)
+
+                # # case-2
+                # if (v_f > v_l) and (a_f > a_l) and a_f < 0:
+                #     f_ids.append(f_id)
+                #     l_ids.append(l_id)
+                #     frame_ids.append(frame)
+
+                # # case-3 - evasive action
+                if (v_f > v_l) and a_f < 0:
+                    f_ids.append(f_id)
+                    l_ids.append(l_id)
+                    frame_ids.append(frame)
 
             except IndexError:
                 continue
 
     df = pd.DataFrame({'follower_ID': f_ids, 'lead_ID': l_ids, 'frame_id': frame_ids})
-    df.to_csv('data/data.csv', index=False)
+    df.to_csv('data/data_case3.csv', index=False)
 
 
 if __name__ == '__main__':
@@ -274,50 +299,49 @@ if __name__ == '__main__':
     #
     # # acc_analysis(trajectory_data)
     # get_pairs(trajectory_data)
-    # # get_data_for_analysis(trajectory_data)
     #
     # # SEV_long, TTC, MTTC
     #
-    # frame_id = 3244
+    frame_id = 3244
     # # vehicles - (1024, 1015); (1031, 1024); (1001, 994)
     #
     # frames = get_frames_cars(trajectory_data, 250, 243)
     # get_frames_cars(trajectory_data, 250, 243)
     #
-    # compute_metrics(trajectory_data, 1024, 1015, frame_id=frame_id)
-    # compute_metrics(trajectory_data, 1023, 1013, frame_id=frame_id)
-    # compute_metrics(trajectory_data, 1020, 1016, frame_id=frame_id)
+    # compute_metrics(trajectory_data, 250, 243, frame_id=1301)
+    compute_metrics(trajectory_data, 1024, 1015, frame_id=frame_id)
+    compute_metrics(trajectory_data, 1023, 1013, frame_id=frame_id)
+    compute_metrics(trajectory_data, 1020, 1016, frame_id=frame_id)
+
+    compute_metrics(trajectory_data, 1026, 1014, frame_id=frame_id)
+    compute_metrics(trajectory_data, 1025, 1004, frame_id=frame_id)
+    compute_metrics(trajectory_data, 1024, 1015, frame_id=frame_id)
+
     #
     # # val = sm.compute_SEV_longitudinal(vr, vf=vf, rho=0.8, a_accel=8.42, a_max_brake=-4.31, a_min_brake=-11.1)
     # # val = sm.compute_SEV_longitudinal(vr, vf=vf, rho=0.8, a_accel=6.2, a_max_brake=-4.42, a_min_brake=-10.84)
 
 
-    pair_data = pd.read_csv('data/data_case1.csv', low_memory=False)
-    # print(pair_data.)
-    f_ids = list(pair_data.follower_ID)
-    l_ids = list(pair_data.lead_ID)
-    frame_ids = list(pair_data.frame_id)
-    data = []
-    i= 0
-    for (f_id, l_id, frame_id) in zip(f_ids, l_ids, frame_ids):
-        i += 1
-        f_data = get_data_by_vehicle_ID(trajectory_data, f_id)
-        l_data = get_data_by_vehicle_ID(trajectory_data, l_id)
-
-        f_frame_data = f_data[(f_data['Preceding'] == l_id) & (f_data['Frame_ID'] == frame_id)]
-        l_frame_data = l_data[(l_data['Following'] == f_id) & (l_data['Frame_ID'] == frame_id)]
-
-        # print(f_frame_data)
-        # print(l_frame_data)
-
-        data.append(compute_metrics(trajectory_data, f_id, l_id, frame_id=frame_id))
-        # if i==10:
-        #     break
-
-    print(data)
-    df = pd.DataFrame(data, columns=['f_id', 'l_id', 'frame_id', 'velocity_following', 'velocity_leading',
-            'acc_following', 'acc_leading', 'spacing', 'dlong', 'sev_long', 'sev', 'ttc', 'ttc_f', 'mttc', 'mttc_f'])
-
-    df.to_csv('data/metrics.csv')
+    # pair_data = pd.read_csv('data/data_case3.csv', low_memory=False)
+    # # print(pair_data.)
+    # f_ids = list(pair_data.follower_ID)
+    # l_ids = list(pair_data.lead_ID)
+    # frame_ids = list(pair_data.frame_id)
+    # data = []
+    # i= 0
+    # for (f_id, l_id, frame_id) in zip(f_ids, l_ids, frame_ids):
+    #     i += 1
+    #     f_data = get_data_by_vehicle_ID(trajectory_data, f_id)
+    #     l_data = get_data_by_vehicle_ID(trajectory_data, l_id)
+    #
+    #     f_frame_data = f_data[(f_data['Preceding'] == l_id) & (f_data['Frame_ID'] == frame_id)]
+    #     l_frame_data = l_data[(l_data['Following'] == f_id) & (l_data['Frame_ID'] == frame_id)]
+    #     data.append(compute_metrics(trajectory_data, f_id, l_id, frame_id=frame_id))
+    #
+    # # print(data)
+    # df = pd.DataFrame(data, columns=['f_id', 'l_id', 'frame_id', 'velocity_following', 'velocity_leading',
+    #         'acc_following', 'acc_leading', 'spacing', 'dlong', 'sev_long', 'sev', 'ttc', 'ttc_f', 'mttc', 'mttc_f'])
+    #
+    # df.to_csv('data/metrics_case3.csv', index=False)
 
 
